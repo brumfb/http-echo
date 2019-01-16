@@ -10,13 +10,14 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/hashicorp/http-echo/version"
+	"github.com/brumfb/http-echo/version"
 )
 
 var (
 	listenFlag  = flag.String("listen", ":5678", "address and port to listen")
 	textFlag    = flag.String("text", "", "text to put on the webpage")
 	versionFlag = flag.Bool("version", false, "display version information")
+	healthFlag  = flag.String("health", "", "address and port for health checks")
 
 	// stdoutW and stderrW are for overriding in test.
 	stdoutW = os.Stdout
@@ -63,6 +64,23 @@ func main() {
 		}
 		close(serverCh)
 	}()
+
+	if *healthFlag != "" {
+		listenMux := http.NewServeMux()
+		listenMux.HandleFunc("/health", withAppHeaders(httpHealth()))
+
+		listenServer := &http.Server{
+			Addr:    *healthFlag,
+			Handler: listenMux,
+		}
+
+		go func() {
+			log.Printf("[INFO] health server is listening on %s\n", *healthFlag)
+			if err := listenServer.ListenAndServe(); err != http.ErrServerClosed {
+				log.Fatalf("[ERR] health server exited with: %s", err)
+			}
+		}()
+	}
 
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, os.Interrupt)
